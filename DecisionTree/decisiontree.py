@@ -37,34 +37,59 @@ label: {self.label}
     def reset_id_gen():
         Node.static_node_id_generator = 1
         
-
+# Helper function used to display the links between all nodes of a subtree
+def links(node):        
+    if len(node.children) > 0:
+        for n in node.children:
+            print(f"{node.id} -> {n.id}")
+            links(n)
+    else:
+        print(f"Node {node.id} is a leaf")
+    
+# Helper function used to display the details of all nodes of a subtree
+def node_details(node):
+    print(node)
+    if len(node.children) > 0:
+        for n in node.children:
+            node_details(n)
 
 # Entropy helper function with weights parameter to account for fractional examples
-def H(data, weights):
+def H(Y, weights):
     entropy = 0    
+    
+    
     weights_sum = sum(weights)
     
     weighted_proportions = dict()
     
-    for i in data.unique().tolist():
+    for i in set(Y):
         weighted_proportions.update({i : 0})
-        for j, k in zip(data, weights):
+        for j, k in zip(Y, weights):
             if i == j:
                 weighted_proportions[i] += k
         weighted_proportions[i] /= weights_sum
         entropy -= weighted_proportions[i]*np.log2(weighted_proportions[i])
+    
+    # numpy_Y = np.array(Y)
+    # w = np.array(weights)
+        
+    # unq,inv=np.unique(numpy_Y,return_inverse=True)
+    # freqs = np.bincount(inv,w.reshape(-1)) / sum(w)
+
+    # for i in range(len(unq)):
+    #     entropy -= freqs[i]*np.log2(freqs[i])
         
     return entropy
     
 # Majority error helper function with weights parameter to account for fractional examples
-def ME(data, weights):
+def ME(Y, weights):
     high_prop = 0
     weights_sum = sum(weights)
     weighted_proportions = dict()
     
-    for i in data.unique().tolist():
+    for i in set(Y):
         weighted_proportions.update({i : 0})
-        for j, k in zip(data, weights):
+        for j, k in zip(Y, weights):
             if i == j:
                 weighted_proportions[i] += k
         weighted_proportions[i] /= weights_sum
@@ -75,82 +100,95 @@ def ME(data, weights):
     return 1 - high_prop
 
 # Gini index helper function with weights parameter to account for fractional examples
-def GI(data, weights):
-    gini_index = 1.0
+def GI(Y, weights):
+    gini_index = 1
     weights_sum = sum(weights)
     weighted_proportions = dict()
     
-    for i in data.unique().tolist():
+    for i in set(Y):
         weighted_proportions.update({i : 0})
-        for j, k in zip(data, weights):
+        for j, k in zip(Y, weights):
             if i == j:
                 weighted_proportions[i] += k
         weighted_proportions[i] /= weights_sum
-        gini_index -= weighted_proportions[i]**2
+        gini_index - weighted_proportions[i]**2
         
     return gini_index
 
 # Heuristic function that uses the specified heuristic helper function based on heur input parameter
-def heuristic(data, heur, weights):
+def heuristic(Y, heur, weights):
     if heur == "H":
-        return H(data, weights)
+        return H(Y, weights)
     elif heur == "ME":
-        return ME(data, weights)
+        return ME(Y, weights)
     elif heur == "GI":
-        return GI(data, weights)
+        return GI(Y, weights)
     else:
         print("Invalid heuristic, options are:\nH - Entropy\nME - Majority Error\nGI - Gini Index")
         return None
 
 # Function that takes the label column and weights as input parameters and returns the name and proportion of the most common label
-def common_label(data, weights):
+def common_label(Y, weights):
+    
     weights_sum = sum(weights)
     weighted_counts = dict()
-    
-    for i in data.unique().tolist():
-        weighted_counts.update({i : 0})
-        for j, k in zip(data, weights):
-            if i == j:
-                weighted_counts[i] += k
-        weighted_counts[i] /= weights_sum
     
     label_proportion = 0
     label_name = None
     
-    for i in weighted_counts:
+    for i in set(Y):
+        weighted_counts.update({i : 0})
+        for j, k in zip(Y, weights):
+            if i == j:
+                weighted_counts[i] += k
+        weighted_counts[i] /= weights_sum
+    
         if weighted_counts[i] > label_proportion:
             label_proportion = weighted_counts[i]
             label_name = i
 
     return label_name, label_proportion
 
-
 # Function used to calculate information gain of one attribute using the specified heuristic
-def IG(data, attr_name, attr_vals, label_var, heur, weights):
+def IG(X, Y, col_id, attr_vals, heur, weights):
     exp_decrease = 0
-    weights_sum = sum(weights)
     
     for x in attr_vals:
-        Sv = data[data[attr_name] == x]
-        if len(Sv) != 0:
-            Sv_weights = [weights[i] for i in list(Sv.index)]
-            Sv_weights_sum = sum(Sv_weights)
-            exp_decrease += (Sv_weights_sum / weights_sum) * heuristic(Sv[label_var], heur, Sv_weights)
-    return heuristic(data[label_var], heur, weights) - exp_decrease
+
+        row_indeces = np.where(X[:, col_id] == x)
+        
+        Sv_X = X[row_indeces]
+        
+        if len(Sv_X) != 0:
+            
+            Sv_weights = [weights[i] for i in row_indeces[0].tolist()]
+            Sv_Y = [Y[i] for i in row_indeces[0].tolist()]
+            exp_decrease += (sum(Sv_weights) / sum(weights)) * heuristic(Sv_Y, heur, Sv_weights)
+    return heuristic(Y, heur, weights) - exp_decrease
 
 # Function used to determine the best attribute to split the data on using the specified attributes and heuristic
-def best_attr(data, a_dict, label_var, heur, weights, descriptive_output = True):   
+def best_attr(X, Y, a_dict, heur, weights):   
     max_gain = -1
     best_attr_name = None
     for a_name in a_dict:
-        temp_gain = IG(data, a_name, a_dict[a_name], label_var, heur, weights)
-        if descriptive_output:
-            print(f"\tIG({a_name}) = {round(temp_gain, 4)}")
+        
+        col_id = 0
+        
+        for i in a_dict:
+            if i != a_name:
+                col_id += 1
+            else:
+                break
+        
+        
+        temp_gain = IG(X, Y, col_id, a_dict[a_name], heur, weights)
+        # if descriptive_output:
+        #     print(f"\tIG({a_name}) = {round(temp_gain, 4)}")
         if max_gain < temp_gain:
             max_gain = temp_gain
             best_attr_name = a_name
-    if descriptive_output:
-        print()   
+    # if descriptive_output:
+    #     print()
     return best_attr_name, max_gain
 
 # Function used to convert continuous data to binary data using the median value
@@ -175,153 +213,116 @@ def convert_numerical(data, data_types, medians = None):
                 median_index += 1
     return data, meds
     
+
 # ID3 algorithm with hyperparameters for the heuristic, max depth, and weights for fractional examples
 # The following parameters are only meant for recursive calls within the ID3 code body: parent, rule
-def ID3(S, L, attr_dict, parent = None, rule = None, heur = "H", max_depth = np.inf, weights = None, descriptive_output = True):
-    # If weights are not given then default of 1 is ascribed to each row in the data
+def ID3(X, Y, attr_dict, heur = "H", max_depth = np.inf, weights = None, parent = None, rule = None, rand_forest = False, n_rand_attrs = None):
+    
+    
     if weights == None:
-        weights = [1] * len(S)
+        weights = [1] * len(X)
     
-    # Provides descriptive output for each step in tree construction if desired
-    if descriptive_output:
-        if parent == None:
-            print("Full dataset:")
-            print(f"{S}\n")
-        else:
-            print(f"Data subset where {parent.attribute} = {rule}")
-            print(f"{S}\n")
+    # if descriptive_output:
+    #     if parent == None:
+    #         print("Full dataset:")
+    #         print(f"{S}\n")
+    #     else:
+    #         print(f"Data subset where {parent.attribute} = {rule}")
+    #         print(f"{S}\n")
     
-    # Determines whether the max_depth specified in the function call is appropriate
     if max_depth < 0:
         print("The value passed for the max_depth parameter was not positive, so a full decision tree will be created.")
         max_depth = np.inf
     
-    # Sets the current depth, when parent = None then it is the first function call and depth is zero
     if parent == None:
         current_depth = 0
     else:
         current_depth = parent.depth + 1
     
-    # Determines the most common label and its proportion factoring weights for fractional examples
-    common_tuple = common_label(S[L], weights)
+    common_tuple = common_label(Y, weights)
     
-    # Generic ID3 exit condition, which also includes a condition for the max depth of the tree
     if common_tuple[1] == 1.0 or len(attr_dict) == 0 or current_depth == max_depth:
-
-        # Initialize leaf node and set the appropriate data members
+        
         leaf = Node()
         leaf.parent = parent
         leaf.label = common_tuple[0]
         leaf.depth = current_depth
-
-        # Provides descriptive output for each step in tree construction if desired
-        if descriptive_output:
-            if common_tuple[1] == 1.0:
-                print(f"A leaf node was created (ID = {leaf.id}) because the highest label proportion is 100%")
-            elif len(attr_dict) == 0:
-                print(f"A leaf node was created (label = {common_tuple[0]}) because there are no remaining attributes")
-            elif current_depth == max_depth:
-                print(f"A leaf node was created (label = {common_tuple[0]}) because the maximum tree depth was reached")
         
-        # Return leaf node
         return leaf
         
     else:
         
-        # Initialize current root/non-leaf node and set the appropriate data members
         root = Node()
         root.parent = parent
         root.depth = current_depth
         
-        # Set outheur based on the specified heuristic to be used in the descriptive output
-        if heur == "H":
-            outheur = "entropy"
-        elif heur == "ME":
-            outheur = "majority error"
-        elif heur == "GI":
-            outheur = "gini index"
+        if rand_forest:
+            
+            if n_rand_attrs == None:
+                
+                if len(attr_dict) > 2:
+                    n_rand_attrs = int(len(attr_dict) / 2)
+                else:
+                    n_rand_attrs = 1
+                    
+            else:
+                
+                if n_rand_attrs > len(attr_dict):
+                    n_rand_attrs = int(len(attr_dict) / 2)
+                elif len(attr_dict) <= 2:
+                    n_rand_attrs = 1
+                    
+            keys = np.array(list(attr_dict.keys()))
+            keys = keys[np.random.choice(len(keys), n_rand_attrs, replace=False)].tolist()
+            
+            rand_dict = {}
+
+            for i in keys:
+                rand_dict[i] = attr_dict[i]
+                
+            root.attribute = best_attr(X, Y, rand_dict, heur, weights)[0]
+            
+        else:
+            root.attribute = best_attr(X, Y, attr_dict, heur, weights)[0]
         
-        # Provides descriptive output for each step in tree construction if desired
-        if descriptive_output:
-            print(f"Information gain was calculated using {outheur} for the following remaining attributes: {list(attr_dict.keys())}")
         
-        # Determine best attribute to split on, and pass it to the current node's attribute data member
-        root.attribute = best_attr(S, attr_dict, L, heur, weights, descriptive_output=descriptive_output)[0]
+        col_id = 0
         
-        # Provides descriptive output for each step in tree construction if desired
-        if descriptive_output:
-            print(f"The best attribute to split the data is {root.attribute}")
+        for i in attr_dict:
+            if i != root.attribute:
+                col_id += 1
+            else:
+                break
         
-        # Create new attribute dictionary used in the recursive call
         new_attr_dict = attr_dict.copy()
-        
-        # Pull the list of possible attribute values from the best-split attribute
         attr_values = new_attr_dict[root.attribute]
-        
-        # Remove best-split attribute from new attribute dictionary
         new_attr_dict.pop(root.attribute)
         
-        # Provides descriptive output for each step in tree construction if desired
-        if descriptive_output:
-            print(f"The dataset will be split into {len(attr_values)} subsets based on the following conditions:")
-            for i in attr_values:
-                print(f"\t{root.attribute} = {i}")
-            
-            print()
-        
-        # For each possible value, v, of the best-split attribute:
         for v in attr_values:
-            # Create data subset where best-split attribute equals v, and removes that attribute from the data subset
-            Sv = S[S[root.attribute] == v].drop(root.attribute, axis=1)
             
-            # Selects the weights associated with each example in the data subset to be used in the recursive call
-            Sv_weights = [weights[i] for i in Sv.index.tolist()]
+            row_indeces = np.where(X[:, col_id] == v)
             
-            # Reset the index of the data subset to start from 0
-            Sv.reset_index(inplace=True, drop=True)
+            Sv_X = np.delete(X[row_indeces], col_id, 1)
             
-            # If the data subset is empty:
-            if len(Sv) == 0:
+            Sv_weights = [weights[i] for i in row_indeces[0].tolist()]
+            Sv_Y = [Y[i] for i in row_indeces[0].tolist()]     
+            
+            if len(Sv_X) == 0:
                 
-                # Initialize leaf node and set appropriate data members
                 leaf = Node()
                 leaf.parent = root
-                leaf.label = common_label(S[L], weights)[0]
+                leaf.label = common_label(Y, weights)[0]
                 leaf.depth = root.depth + 1
-                
-                # Provides descriptive output for each step in tree construction if desired
-                if descriptive_output:
-                    print(f"A leaf node was created (ID = {leaf.id}) because the current data subset is empty.")
             
             else:
                 
-                # Initialize leaf node and set as the output from the next recursive call    
-                leaf = ID3(Sv, L, new_attr_dict, root, v, heur, max_depth, Sv_weights, descriptive_output=descriptive_output)
+                leaf = ID3(Sv_X, Sv_Y, new_attr_dict, heur, max_depth, Sv_weights, root, v, rand_forest, n_rand_attrs)
             
-            # Set the rule data member for the current leaf node
             leaf.rule = v
             
-            # Append leaf node to the list of children nodes for the root/current node
             root.children.append(leaf)
-        
-        # Return the current node
+            
         return root
-    
-# Helper function used to display the links between all nodes of a subtree
-def links(node):        
-    if len(node.children) > 0:
-        for n in node.children:
-            print(f"{node.id} -> {n.id}")
-            links(n)
-    else:
-        print(f"Node {node.id} is a leaf")
-    
-# Helper function used to display the details of all nodes of a subtree
-def node_details(node):
-    print(node)
-    if len(node.children) > 0:
-        for n in node.children:
-            node_details(n)
 
 # Decision Tree Class Definition
 class DecisionTree:
@@ -338,12 +339,23 @@ class DecisionTree:
     def display_links(self):
         links(self.root)
     
+    
     # Member function to make a prediction on one row of data        
-    def predict(self, data):
+    def predict(self, data, a_dict):
         current = self.root
         while current.label == None:
             for x in current.children:
-                if data[current.attribute] == x.rule:
+                
+                index = 0
+                
+                for i in a_dict:
+                    if i != current.attribute:
+                        index += 1
+                    else:
+                        break
+                
+                
+                if data[index] == x.rule:
                     current = x
                     break
-        return current.label
+        return current.label   
