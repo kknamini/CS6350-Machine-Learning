@@ -1,4 +1,4 @@
-Instructions for running HW3.py:
+Instructions for running hw3.py:
 
 1: Open a Git Bash terminal
 
