@@ -2,7 +2,13 @@ This is a light-weighted machine learning library developed by Kurt Namini for C
 
 # Decision Trees
 
-# Ensemble Methods
+# Ensemble Methods (Based On Decision Trees)
+
+## Adaboost Trees
+
+## Bagged Trees
+
+## Random Forest
 
 # Perceptron
 
