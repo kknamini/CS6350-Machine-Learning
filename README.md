@@ -14,4 +14,6 @@ This is a light-weighted machine learning library developed by Kurt Namini for C
 
 # Support Vector Machines
 
+# Logistic Regression
+
 # Neural Networks
